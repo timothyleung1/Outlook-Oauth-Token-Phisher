@@ -1,4 +1,8 @@
 # Fishing outlook resources
+# Basically just setting up an application in with outlook dev account 
+# send out phishing email by changing the url to your app ID 
+# If they click accept (happy to share) 
+# then you will receive an oauth token and you can download their emails .. etc 
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 import SocketServer
 from SocketServer import ThreadingMixIn
